@@ -19357,7 +19357,7 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
         for (const k in secretMap) {
             const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
             // Append the current key to the name of the env variable
-            const newEnvName = `${tempEnvName || transformToValidEnvName(secretName)}_${transformToValidEnvName(k)}`;
+            const newEnvName = `${transformToValidEnvName(k)}`;
             secretsToCleanup = [...secretsToCleanup, ...injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName)];
         }
     }
