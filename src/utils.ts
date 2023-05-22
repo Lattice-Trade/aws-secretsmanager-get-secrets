@@ -129,8 +129,8 @@ export async function getSecretValue(client: SecretsManagerClient, secretId: str
  * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
  * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
  */
-export function injectSecret(secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): string[] {
-    let secretsToCleanup = [] as string[];
+export function injectSecret(secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): Map<string, string> {
+    const secretsToCleanup = new Map<string, string>;
     if(parseJsonSecrets && isJSONString(secretValue)){
         // Recursively parses json secrets
         const secretMap = JSON.parse(secretValue) as Record<string, any>;
@@ -140,7 +140,7 @@ export function injectSecret(secretName: string, secretValue: string, parseJsonS
 
             // Append the current key to the name of the env variable
             const newEnvName = `${transformToValidEnvName(k)}`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName)];
+            injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName)
         }
     } else {
         const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
@@ -156,7 +156,7 @@ export function injectSecret(secretName: string, secretValue: string, parseJsonS
         // Export variable
         core.debug(`Injecting secret ${secretName} as environment variable '${envName}'.`);
         core.exportVariable(envName, secretValue);
-        secretsToCleanup.push(envName);
+        secretsToCleanup.set(envName, secretValue);
     }
 
     return secretsToCleanup;

@@ -27,7 +27,7 @@ export async function run(): Promise<void> {
         const secretIds: string[] = await buildSecretsList(client, secretConfigInputs);
 
         // Keep track of secret names that will need to be cleaned from the environment
-        let secretsToCleanup = [] as string[];
+        let injectedSecrets;
 
         core.info('Your secret names may be transformed in order to be valid environment variables (see README). Enable Debug logging in order to view the new environment names.');
 
@@ -46,19 +46,21 @@ export async function run(): Promise<void> {
                     secretAlias = isArn ? secretValueResponse.name : secretId;
                 }
 
-                const injectedSecrets = injectSecret(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
-                secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
+                injectedSecrets = injectSecret(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
+                
             } catch (err) {
                 // Fail action for any error
                 core.setFailed(`Failed to fetch secret: '${secretId}'. Error: ${err}.`)
             } 
         }
-
-        if(exportToEnvFile){
-            saveEnvFile(pathMameEnvFile, JSON.stringify(secretsToCleanup));
-        } else{
-            core.exportVariable(CLEANUP_NAME, JSON.stringify(secretsToCleanup));
-        }
+        let envContent = ''; 
+        if(exportToEnvFile && injectedSecrets){
+            for (const [key, value] of injectedSecrets) {
+                envContent+= `${key}=${value}\n`;
+                console.log(key, value);            //"Lokesh" 37 "Raj" 35 "John" 40
+            }
+            saveEnvFile(pathMameEnvFile, envContent);
+        } 
         // Export the names of variables to clean up after completion
 
         core.info("Completed adding secrets.");

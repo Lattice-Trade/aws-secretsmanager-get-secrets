@@ -19144,7 +19144,6 @@ exports.run = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const client_secrets_manager_1 = __nccwpck_require__(9600);
 const utils_1 = __nccwpck_require__(1314);
-const constants_1 = __nccwpck_require__(9042);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -19158,7 +19157,7 @@ function run() {
             core.info('Building secrets list...');
             const secretIds = yield (0, utils_1.buildSecretsList)(client, secretConfigInputs);
             // Keep track of secret names that will need to be cleaned from the environment
-            let secretsToCleanup = [];
+            let injectedSecrets;
             core.info('Your secret names may be transformed in order to be valid environment variables (see README). Enable Debug logging in order to view the new environment names.');
             // Get and inject secret values
             for (let secretId of secretIds) {
@@ -19172,19 +19171,20 @@ function run() {
                     if (!secretAlias) {
                         secretAlias = isArn ? secretValueResponse.name : secretId;
                     }
-                    const injectedSecrets = (0, utils_1.injectSecret)(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
-                    secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
+                    injectedSecrets = (0, utils_1.injectSecret)(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
                 }
                 catch (err) {
                     // Fail action for any error
                     core.setFailed(`Failed to fetch secret: '${secretId}'. Error: ${err}.`);
                 }
             }
-            if (exportToEnvFile) {
-                (0, utils_1.saveEnvFile)(pathMameEnvFile, JSON.stringify(secretsToCleanup));
-            }
-            else {
-                core.exportVariable(constants_1.CLEANUP_NAME, JSON.stringify(secretsToCleanup));
+            let envContent = '';
+            if (exportToEnvFile && injectedSecrets) {
+                for (const [key, value] of injectedSecrets) {
+                    envContent += `${key}=${value}\n`;
+                    console.log(key, value); //"Lokesh" 37 "Raj" 35 "John" 40
+                }
+                (0, utils_1.saveEnvFile)(pathMameEnvFile, envContent);
             }
             // Export the names of variables to clean up after completion
             core.info("Completed adding secrets.");
@@ -19361,7 +19361,7 @@ exports.getSecretValue = getSecretValue;
  * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
  */
 function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
-    let secretsToCleanup = [];
+    const secretsToCleanup = new Map;
     if (parseJsonSecrets && isJSONString(secretValue)) {
         // Recursively parses json secrets
         const secretMap = JSON.parse(secretValue);
@@ -19369,7 +19369,7 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
             const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
             // Append the current key to the name of the env variable
             const newEnvName = `${transformToValidEnvName(k)}`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName)];
+            injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName);
         }
     }
     else {
@@ -19383,7 +19383,7 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
         // Export variable
         core.debug(`Injecting secret ${secretName} as environment variable '${envName}'.`);
         core.exportVariable(envName, secretValue);
-        secretsToCleanup.push(envName);
+        secretsToCleanup.set(envName, secretValue);
     }
     return secretsToCleanup;
 }
