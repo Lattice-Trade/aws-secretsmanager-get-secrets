@@ -1,4 +1,6 @@
 import * as core from '@actions/core'
+import fs from 'fs';
+
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import {
     buildSecretsList,
@@ -6,7 +8,8 @@ import {
     getSecretValue,
     injectSecret,
     extractAliasAndSecretIdFromInput,
-    SecretValueResponse
+    SecretValueResponse,
+    saveEnvFile
 } from "./utils";
 import { CLEANUP_NAME } from "./constants";
 
@@ -16,6 +19,8 @@ export async function run(): Promise<void> {
         const client : SecretsManagerClient = new SecretsManagerClient({region: process.env.AWS_DEFAULT_REGION, customUserAgent: "github-action"});
         const secretConfigInputs: string[] = [...new Set(core.getMultilineInput('secret-ids'))];
         const parseJsonSecrets = core.getBooleanInput('parse-json-secrets');
+        const exportToEnvFile = core.getBooleanInput('export-to-env-file');
+        const pathMameEnvFile = core.getInput('path-name-env-file');
 
         // Get final list of secrets to request
         core.info('Building secrets list...');
@@ -49,8 +54,12 @@ export async function run(): Promise<void> {
             } 
         }
 
+        if(exportToEnvFile){
+            saveEnvFile(pathMameEnvFile, JSON.stringify(secretsToCleanup));
+        } else{
+            core.exportVariable(CLEANUP_NAME, JSON.stringify(secretsToCleanup));
+        }
         // Export the names of variables to clean up after completion
-        core.exportVariable(CLEANUP_NAME, JSON.stringify(secretsToCleanup));
 
         core.info("Completed adding secrets.");
     } catch (error) {

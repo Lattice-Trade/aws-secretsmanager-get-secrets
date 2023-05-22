@@ -31,9 +31,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
+exports.saveEnvFile = exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
 const core = __importStar(require("@actions/core"));
+const fs_1 = __importDefault(require("fs"));
 const client_secrets_manager_1 = require("@aws-sdk/client-secrets-manager");
 const constants_1 = require("./constants");
 /**
@@ -244,3 +248,26 @@ function cleanVariable(variableName) {
     delete process.env[variableName];
 }
 exports.cleanVariable = cleanVariable;
+function saveEnvFile(envFilePath, envContent) {
+    if (fs_1.default.existsSync(envFilePath)) {
+        fs_1.default.appendFile(envFilePath, envContent, (err) => {
+            if (err) {
+                console.error('Error al actualizar el archivo .env:', err);
+            }
+            else {
+                console.log('Archivo .env actualizado exitosamente.');
+            }
+        });
+    }
+    else {
+        fs_1.default.writeFile(envFilePath, envContent, (err) => {
+            if (err) {
+                console.error('Error al crear el archivo .env:', err);
+            }
+            else {
+                console.log('Archivo .env creado exitosamente.');
+            }
+        });
+    }
+}
+exports.saveEnvFile = saveEnvFile;

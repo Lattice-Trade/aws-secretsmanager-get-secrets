@@ -19152,6 +19152,8 @@ function run() {
             const client = new client_secrets_manager_1.SecretsManagerClient({ region: process.env.AWS_DEFAULT_REGION, customUserAgent: "github-action" });
             const secretConfigInputs = [...new Set(core.getMultilineInput('secret-ids'))];
             const parseJsonSecrets = core.getBooleanInput('parse-json-secrets');
+            const exportToEnvFile = core.getBooleanInput('export-to-env-file');
+            const pathMameEnvFile = core.getInput('path-name-env-file');
             // Get final list of secrets to request
             core.info('Building secrets list...');
             const secretIds = yield (0, utils_1.buildSecretsList)(client, secretConfigInputs);
@@ -19178,8 +19180,13 @@ function run() {
                     core.setFailed(`Failed to fetch secret: '${secretId}'. Error: ${err}.`);
                 }
             }
+            if (exportToEnvFile) {
+                (0, utils_1.saveEnvFile)(pathMameEnvFile, JSON.stringify(secretsToCleanup));
+            }
+            else {
+                core.exportVariable(constants_1.CLEANUP_NAME, JSON.stringify(secretsToCleanup));
+            }
             // Export the names of variables to clean up after completion
-            core.exportVariable(constants_1.CLEANUP_NAME, JSON.stringify(secretsToCleanup));
             core.info("Completed adding secrets.");
         }
         catch (error) {
@@ -19231,9 +19238,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
+exports.saveEnvFile = exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
 const core = __importStar(__nccwpck_require__(2186));
+const fs_1 = __importDefault(__nccwpck_require__(7147));
 const client_secrets_manager_1 = __nccwpck_require__(9600);
 const constants_1 = __nccwpck_require__(9042);
 /**
@@ -19364,10 +19375,9 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
     else {
         const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
         // Fail the action if this variable name is already in use, or is our cleanup name
-        // if (process.env[envName] || envName === constants_1.CLEANUP_NAME) {
-        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        // }
-        
+        if (process.env[envName] || envName === constants_1.CLEANUP_NAME) {
+            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
+        }
         // Inject a single secret
         core.setSecret(secretValue);
         // Export variable
@@ -19445,6 +19455,29 @@ function cleanVariable(variableName) {
     delete process.env[variableName];
 }
 exports.cleanVariable = cleanVariable;
+function saveEnvFile(envFilePath, envContent) {
+    if (fs_1.default.existsSync(envFilePath)) {
+        fs_1.default.appendFile(envFilePath, envContent, (err) => {
+            if (err) {
+                console.error('Error al actualizar el archivo .env:', err);
+            }
+            else {
+                console.log('Archivo .env actualizado exitosamente.');
+            }
+        });
+    }
+    else {
+        fs_1.default.writeFile(envFilePath, envContent, (err) => {
+            if (err) {
+                console.error('Error al crear el archivo .env:', err);
+            }
+            else {
+                console.log('Archivo .env creado exitosamente.');
+            }
+        });
+    }
+}
+exports.saveEnvFile = saveEnvFile;
 
 
 /***/ }),

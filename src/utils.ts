@@ -1,4 +1,5 @@
 import * as core from '@actions/core'
+import fs from 'fs';
 import {
     SecretsManagerClient,
     GetSecretValueCommand,
@@ -230,4 +231,24 @@ export function extractAliasAndSecretIdFromInput(input: string): [string, string
 export function cleanVariable(variableName: string){
     core.exportVariable(variableName, '');
     delete process.env[variableName];
+}
+
+export function saveEnvFile(envFilePath: string, envContent: string): void {
+if (fs.existsSync(envFilePath)) {
+    fs.appendFile(envFilePath, envContent, (err) => {
+        if (err) {
+        console.error('Error al actualizar el archivo .env:', err);
+        } else {
+        console.log('Archivo .env actualizado exitosamente.');
+        }
+    });
+    } else {
+    fs.writeFile(envFilePath, envContent, (err) => {
+        if (err) {
+        console.error('Error al crear el archivo .env:', err);
+        } else {
+        console.log('Archivo .env creado exitosamente.');
+        }
+    });
+    }
 }
