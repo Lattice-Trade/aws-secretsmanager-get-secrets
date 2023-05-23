@@ -168,9 +168,9 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
     else {
         const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
         // Fail the action if this variable name is already in use, or is our cleanup name
-        if (process.env[envName] || envName === constants_1.CLEANUP_NAME) {
-            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        }
+        // if (process.env[envName] || envName === CLEANUP_NAME){
+        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
+        // }
         // Inject a single secret
         core.setSecret(secretValue);
         // Export variable
