@@ -170,26 +170,28 @@ export function injectSecret(secretName: string, secretValue: string, parseJsonS
  * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
  * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
  */
-export function injectSecretEnvFile(secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): string[] {
+export function injectSecretEnvFile(pathMameEnvFile: string, secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): string[] {
     let secretsToCleanup = [] as string[];
     if(parseJsonSecrets && isJSONString(secretValue)){
         // Recursively parses json secrets
         const secretMap = JSON.parse(secretValue) as Record<string, any>;
-
+        let envContent = '';
         for (const k in secretMap) {
             const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
 
             // Append the current key to the name of the env variable
             const newEnvName = `${transformToValidEnvName(k)}`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(secretName, keyValue, parseJsonSecrets, newEnvName)];
+            envContent+= `${newEnvName}=${keyValue}\n`;
+            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(pathMameEnvFile, secretName, keyValue, parseJsonSecrets, newEnvName)];
         }
+        saveEnvFile(pathMameEnvFile, envContent);
     } else {
         const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
 
         // Fail the action if this variable name is already in use, or is our cleanup name
-        if (process.env[envName] || envName === CLEANUP_NAME){
-            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        }
+        // if (process.env[envName] || envName === CLEANUP_NAME){
+        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
+        // }
 
         // Inject a single secret
         core.setSecret(secretValue);

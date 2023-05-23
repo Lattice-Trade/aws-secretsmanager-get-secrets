@@ -19159,7 +19159,6 @@ function run() {
             const secretIds = yield (0, utils_1.buildSecretsList)(client, secretConfigInputs);
             // Keep track of secret names that will need to be cleaned from the environment
             let secretsToCleanup = [];
-            let envContent = '';
             core.info('Your secret names may be transformed in order to be valid environment variables (see README). Enable Debug logging in order to view the new environment names.');
             // Get and inject secret values
             for (let secretId of secretIds) {
@@ -19173,9 +19172,14 @@ function run() {
                     if (!secretAlias) {
                         secretAlias = isArn ? secretValueResponse.name : secretId;
                     }
-                    const injectedSecrets = (0, utils_1.injectSecret)(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
-                    envContent += `${secretId}=${secretValueResponse.secretValue}\n`;
-                    secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
+                    if (exportToEnvFile) {
+                        const injectedSecrets = (0, utils_1.injectSecretEnvFile)(pathMameEnvFile, secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
+                        secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
+                    }
+                    else {
+                        const injectedSecrets = (0, utils_1.injectSecret)(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
+                        secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
+                    }
                 }
                 catch (err) {
                     // Fail action for any error
@@ -19183,9 +19187,6 @@ function run() {
                 }
             }
             core.exportVariable(constants_1.CLEANUP_NAME, JSON.stringify(secretsToCleanup));
-            if (exportToEnvFile) {
-                (0, utils_1.saveEnvFile)(pathMameEnvFile, envContent);
-            }
             // Export the names of variables to clean up after completion
             core.info("Completed adding secrets.");
         }
@@ -19396,24 +19397,27 @@ exports.injectSecret = injectSecret;
  * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
  * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
  */
-function injectSecretEnvFile(secretName, secretValue, parseJsonSecrets, tempEnvName) {
+function injectSecretEnvFile(pathMameEnvFile, secretName, secretValue, parseJsonSecrets, tempEnvName) {
     let secretsToCleanup = [];
     if (parseJsonSecrets && isJSONString(secretValue)) {
         // Recursively parses json secrets
         const secretMap = JSON.parse(secretValue);
+        let envContent = '';
         for (const k in secretMap) {
             const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
             // Append the current key to the name of the env variable
             const newEnvName = `${transformToValidEnvName(k)}`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(secretName, keyValue, parseJsonSecrets, newEnvName)];
+            envContent += `${newEnvName}=${keyValue}\n`;
+            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(pathMameEnvFile, secretName, keyValue, parseJsonSecrets, newEnvName)];
         }
+        saveEnvFile(pathMameEnvFile, envContent);
     }
     else {
         const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
         // Fail the action if this variable name is already in use, or is our cleanup name
-        if (process.env[envName] || envName === constants_1.CLEANUP_NAME) {
-            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        }
+        // if (process.env[envName] || envName === CLEANUP_NAME){
+        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
+        // }
         // Inject a single secret
         core.setSecret(secretValue);
         // Export variable
