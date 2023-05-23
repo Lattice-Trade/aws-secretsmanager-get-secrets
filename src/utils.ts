@@ -162,6 +162,47 @@ export function injectSecret(secretName: string, secretValue: string, parseJsonS
     return secretsToCleanup;
 }
 
+/**
+ * Transforms and injects secret as a masked environmental variable
+ *
+ * @param secretName: Name of the secret
+ * @param secretValue: Value to set for secret
+ * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
+ * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
+ */
+export function injectSecretEnvFile(secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): string[] {
+    let secretsToCleanup = [] as string[];
+    if(parseJsonSecrets && isJSONString(secretValue)){
+        // Recursively parses json secrets
+        const secretMap = JSON.parse(secretValue) as Record<string, any>;
+
+        for (const k in secretMap) {
+            const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
+
+            // Append the current key to the name of the env variable
+            const newEnvName = `${transformToValidEnvName(k)}`;
+            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(secretName, keyValue, parseJsonSecrets, newEnvName)];
+        }
+    } else {
+        const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
+
+        // Fail the action if this variable name is already in use, or is our cleanup name
+        if (process.env[envName] || envName === CLEANUP_NAME){
+            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
+        }
+
+        // Inject a single secret
+        core.setSecret(secretValue);
+
+        // Export variable
+        core.debug(`Injecting secret ${secretName} as environment variable '${envName}'.`);
+        core.exportVariable(envName, secretValue);
+        secretsToCleanup.push(envName);
+    }
+
+    return secretsToCleanup;
+}
+
 /*
  * Checks if the given secret is a valid JSON value
  */
