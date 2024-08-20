@@ -35,25 +35,38 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveEnvFile = exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecretEnvFile = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
+exports.buildSecretsList = buildSecretsList;
+exports.getSecretsWithPrefix = getSecretsWithPrefix;
+exports.getSecretValue = getSecretValue;
+exports.injectSecret = injectSecret;
+exports.injectSecretEnvFile = injectSecretEnvFile;
+exports.isJSONString = isJSONString;
+exports.transformToValidEnvName = transformToValidEnvName;
+exports.isSecretArn = isSecretArn;
+exports.extractAliasAndSecretIdFromInput = extractAliasAndSecretIdFromInput;
+exports.cleanVariable = cleanVariable;
+exports.saveEnvFile = saveEnvFile;
+exports.parseTransformationFunction = parseTransformationFunction;
 const core = __importStar(require("@actions/core"));
 const fs_1 = __importDefault(require("fs"));
 const client_secrets_manager_1 = require("@aws-sdk/client-secrets-manager");
 const constants_1 = require("./constants");
+require("aws-sdk-client-mock-jest");
 /**
  * Gets the unique list of all secrets to be requested
  *
  * @param client: SecretsManager client
  * @param configInputs: List of secret names, ARNs, and prefixes provided by user
+ * @param nameTransformation: Transforms the secret name
  */
-function buildSecretsList(client, configInputs) {
+function buildSecretsList(client, configInputs, nameTransformation) {
     return __awaiter(this, void 0, void 0, function* () {
         const finalSecretsList = new Set();
         // Prefix filters should be at least 3 characters, ending in *
         const validFilter = new RegExp('^[a-zA-Z0-9\\/_+=.@-]{3,}\\*$');
         for (const configInput of configInputs) {
             if (configInput.includes('*')) {
-                const [secretAlias, secretPrefix] = extractAliasAndSecretIdFromInput(configInput);
+                const [secretAlias, secretPrefix] = extractAliasAndSecretIdFromInput(configInput, nameTransformation);
                 if (!validFilter.test(secretPrefix)) {
                     throw new Error('Please use a valid prefix search (should be at least 3 characters and end in *)');
                 }
@@ -69,7 +82,6 @@ function buildSecretsList(client, configInputs) {
         return [...finalSecretsList];
     });
 }
-exports.buildSecretsList = buildSecretsList;
 /**
  * Uses ListSecrets to find secrets for a given prefix
  *
@@ -116,7 +128,6 @@ function getSecretsWithPrefix(client, prefix, hasAlias) {
         }
     });
 }
-exports.getSecretsWithPrefix = getSecretsWithPrefix;
 /**
  * Retrieves a secret from Secrets Manager
  *
@@ -144,29 +155,34 @@ function getSecretValue(client, secretId) {
         };
     });
 }
-exports.getSecretValue = getSecretValue;
 /**
  * Transforms and injects secret as a masked environmental variable
  *
  * @param secretName: Name of the secret
  * @param secretValue: Value to set for secret
  * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
+ * @param nameTransformation: Transforms the secret name
  * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
  */
-function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
+function injectSecret(secretName, secretValue, parseJsonSecrets, nameTransformation, tempEnvName) {
     let secretsToCleanup = [];
     if (parseJsonSecrets && isJSONString(secretValue)) {
         // Recursively parses json secrets
         const secretMap = JSON.parse(secretValue);
         for (const k in secretMap) {
             const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
-            // Append the current key to the name of the env variable
-            const newEnvName = `${transformToValidEnvName(k)}`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecret(secretName, keyValue, parseJsonSecrets, newEnvName)];
+            // Append the current key to the name of the env variable and check to avoid prepending an underscore
+            const newEnvName = [
+                tempEnvName || transformToValidEnvName(secretName, nameTransformation),
+                transformToValidEnvName(k, nameTransformation)
+            ]
+                .filter(elem => elem) // Uses truthy-ness of elem to determine if it remains
+                .join("_"); // Join the remaining elements with an underscore
+            secretsToCleanup = [...secretsToCleanup, ...injectSecret(secretName, keyValue, parseJsonSecrets, nameTransformation, newEnvName)];
         }
     }
     else {
-        const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
+        const envName = transformToValidEnvName(tempEnvName ? tempEnvName : secretName, nameTransformation);
         // Fail the action if this variable name is already in use, or is our cleanup name
         // if (process.env[envName] || envName === CLEANUP_NAME){
         //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
@@ -180,7 +196,6 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
     }
     return secretsToCleanup;
 }
-exports.injectSecret = injectSecret;
 /**
  * Transforms and injects secret as a masked environmental variable
  *
@@ -219,7 +234,6 @@ function injectSecretEnvFile(pathMameEnvFile, secretName, secretValue, parseJson
     }
     return secretsToCleanup;
 }
-exports.injectSecretEnvFile = injectSecretEnvFile;
 /*
  * Checks if the given secret is a valid JSON value
  */
@@ -234,20 +248,20 @@ function isJSONString(secretValue) {
         return false;
     }
 }
-exports.isJSONString = isJSONString;
 /*
  * Transforms the secret name into a valid environmental variable name
  * It should consist of only upper case letters, digits, and underscores and cannot begin with a number
  */
-function transformToValidEnvName(secretName) {
+function transformToValidEnvName(secretName, nameTransformation) {
     // Leading digits are invalid
     if (secretName.match(/^[0-9]/)) {
         secretName = '_'.concat(secretName);
     }
     // Remove invalid characters
-    return secretName.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
+    secretName = secretName.replace(/[^a-zA-Z0-9_]/g, '_');
+    // Apply the name transformation. When no transformation is defined fallback to the "uppercase" transformation
+    return nameTransformation ? nameTransformation(secretName) : secretName.toUpperCase();
 }
-exports.transformToValidEnvName = transformToValidEnvName;
 /**
  * Checks if the given secretId is an ARN
  *
@@ -258,17 +272,16 @@ function isSecretArn(secretId) {
     const validArn = new RegExp('^arn:aws:secretsmanager:.*:[0-9]{12,}:secret:.*$');
     return validArn.test(secretId);
 }
-exports.isSecretArn = isSecretArn;
 /*
  * Separates a secret alias from the secret name/arn, if one was provided
  */
-function extractAliasAndSecretIdFromInput(input) {
+function extractAliasAndSecretIdFromInput(input, nameTransformation) {
     const parsedInput = input.split(',');
     if (parsedInput.length > 1) {
         const alias = parsedInput[0].trim();
         const secretId = parsedInput[1].trim();
         // Validate that the alias is valid environment name
-        const validateEnvName = transformToValidEnvName(alias);
+        const validateEnvName = transformToValidEnvName(alias, nameTransformation);
         if (alias !== validateEnvName) {
             throw new Error(`The alias '${alias}' is not a valid environment name. Please verify that it has uppercase letters, numbers, and underscore only.`);
         }
@@ -276,9 +289,8 @@ function extractAliasAndSecretIdFromInput(input) {
         return [alias, secretId];
     }
     // No alias
-    return ['', input.trim()];
+    return [undefined, input.trim()];
 }
-exports.extractAliasAndSecretIdFromInput = extractAliasAndSecretIdFromInput;
 /*
  * Cleans up an environment variable
  */
@@ -286,7 +298,6 @@ function cleanVariable(variableName) {
     core.exportVariable(variableName, '');
     delete process.env[variableName];
 }
-exports.cleanVariable = cleanVariable;
 function saveEnvFile(envFilePath, envContent) {
     if (fs_1.default.existsSync(envFilePath)) {
         fs_1.default.appendFile(envFilePath, envContent, (err) => {
@@ -309,4 +320,18 @@ function saveEnvFile(envFilePath, envContent) {
         });
     }
 }
-exports.saveEnvFile = saveEnvFile;
+/*
+ * Converts name of the transformation to the actual function that performs the transformation.
+ */
+function parseTransformationFunction(config) {
+    switch (config.toLowerCase()) {
+        case 'uppercase':
+            return (input) => input.toUpperCase();
+        case 'lowercase':
+            return (input) => input.toLowerCase();
+        case 'none':
+            return (input) => input;
+        default:
+            throw new Error(`'${config}' is unsupported transformation name. Allowed options are: 'uppercase', 'lowercase' and 'none'`);
+    }
+}

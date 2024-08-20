@@ -14,7 +14,9 @@ import {
     injectSecret,
     isSecretArn,
     extractAliasAndSecretIdFromInput,
-    transformToValidEnvName
+    transformToValidEnvName,
+    parseTransformationFunction,
+    TransformationFunc
 } from "../src/utils";
 
 import { CLEANUP_NAME, LIST_SECRETS_MAX_RESULTS } from "../src/constants";
@@ -30,6 +32,8 @@ const TEST_NAME_1 = 'test/secret1';
 
 const VALID_ARN_2 = 'arn:aws:secretsmanager:ap-south-1:123456789000:secret:test2-aBcdef';
 const TEST_NAME_2 = 'test/secret2';
+
+const VALID_ARN_3 = 'arn:aws:secretsmanager:ap-south-1:123456789000:secret:test3-aBcdef';
 
 const INVALID_ARN = 'aws:secretsmanager:us-east-1:123456789000:secret:test3-aBcdef';
 
@@ -330,9 +334,14 @@ describe('Test secret parsing and handling', () => {
         expect(extractAliasAndSecretIdFromInput(`ARN_ALIAS,${VALID_ARN_1}`)).toEqual(['ARN_ALIAS', VALID_ARN_1]);
     });
 
-    test('Returns blank for alias if none is provided', () => {
-        expect(extractAliasAndSecretIdFromInput("test/secret")).toEqual(['', 'test/secret']);
-        expect(extractAliasAndSecretIdFromInput(VALID_ARN_1)).toEqual(['', VALID_ARN_1]);
+    test('Returns undefined for alias if none is provided', () => {
+        expect(extractAliasAndSecretIdFromInput("test/secret")).toEqual([undefined, 'test/secret']);
+        expect(extractAliasAndSecretIdFromInput(VALID_ARN_1)).toEqual([undefined, VALID_ARN_1]);
+    });
+
+    test('Returns empty string for alias if none is provided, but comma delimited', () => {
+        expect(extractAliasAndSecretIdFromInput(" , test/secret")).toEqual(['', 'test/secret']);
+        expect(extractAliasAndSecretIdFromInput(" , "+VALID_ARN_3)).toEqual(['', VALID_ARN_3]);
     });
 
     test('Throws an error if the provided alias cannot be used as the environment name', () => {
@@ -360,8 +369,8 @@ describe('Test secret parsing and handling', () => {
         expect(transformToValidEnvName('0Admin')).toBe('_0ADMIN')
     });
 
-    test('Transforms to uppercase for environment name', () => {
-        expect(transformToValidEnvName('secret3')).toBe('SECRET3')
+    test('Transformation function is applied', () => {
+        expect(transformToValidEnvName('secret3', (x) => x.toUpperCase())).toBe('SECRET3')
     });
 
     /* 
@@ -393,5 +402,20 @@ describe('Test secret parsing and handling', () => {
 
     test('Test valid nested JSON { "a": "yes", "options": { "opt_a": "yes", "opt_b": "no"} } ', () => {
         expect(isJSONString('{ "a": "yes", "options": { "opt_a": "yes", "opt_b": "no"} }')).toBe(true)
+    });
+
+    test.each([
+        [ 'Uppercase', (x: string) => x.toUpperCase() ],
+        [ 'uppercase', (x: string) => x.toUpperCase() ],
+        [ 'lowErCase', (x: string) => x.toLowerCase() ],
+        [ 'none', (x: string) => x ]
+    ])('NameTransformation parsing of string %s should pass.', (name: string, transformation: TransformationFunc) => {
+        const sampleString = '$abcdEFGijk_';
+        const parsedTransformation = parseTransformationFunction(name);
+        expect(parsedTransformation(sampleString)).toEqual(transformation(sampleString));
+    });
+
+    test.each([ 'something', '' ])('NameTransformation parsing of string %s should fail.', (input) => {
+        expect(() => parseTransformationFunction(input)).toThrow();
     });
 });

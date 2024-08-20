@@ -1,4 +1,5 @@
 name: Tests
+
 on:
   pull_request:
     branches:
@@ -7,16 +8,127 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  tests:
+  unit-tests:
     runs-on: ubuntu-latest
-    name: Run unit tests
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Run unit tests
+        uses: actions/checkout@v4
+      - name: Run Unit Tests
         run: |
           npm ci
           npm run test
       - name: Codecov
-        uses: codecov/codecov-action@v3.1.4
+        uses: codecov/codecov-action@v4.5.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  uppercase-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          name-transformation: uppercase
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SAMPLESECRET1_ALIAS, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/uppercase.test.ts
+
+  lowercase-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          name-transformation: lowercase
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              samplesecret1_alias, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/lowercase.test.ts
+
+  none-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          name-transformation: none
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SampleSecret1_Alias, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/none.test.ts
+
+  default-name-transformation-param-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SAMPLESECRET1_ALIAS, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/uppercase.test.ts
+
+  default-parse-json-secrets-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          secret-ids: JsonSecret
+      - name: Assert Default Is No Json Secrets
+        run: npm run integration-test __integration_tests__/parse_json_secrets.test.ts

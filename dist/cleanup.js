@@ -32,7 +32,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cleanup = void 0;
+exports.cleanup = cleanup;
 const core = __importStar(require("@actions/core"));
 const constants_1 = require("./constants");
 const utils_1 = require("./utils");
@@ -74,5 +74,4 @@ function cleanup() {
         }
     });
 }
-exports.cleanup = cleanup;
 cleanup();

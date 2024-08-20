@@ -10,7 +10,8 @@ import {
     extractAliasAndSecretIdFromInput,
     SecretValueResponse,
     saveEnvFile,
-    injectSecretEnvFile
+    injectSecretEnvFile, isJSONString,
+    parseTransformationFunction
 } from "./utils";
 import { CLEANUP_NAME } from "./constants";
 
@@ -22,10 +23,11 @@ export async function run(): Promise<void> {
         const parseJsonSecrets = core.getBooleanInput('parse-json-secrets');
         const exportToEnvFile = core.getBooleanInput('export-to-env-file');
         const pathMameEnvFile = core.getInput('path-name-env-file');
+        const nameTransformation = parseTransformationFunction(core.getInput('name-transformation'));
 
         // Get final list of secrets to request
         core.info('Building secrets list...');
-        const secretIds: string[] = await buildSecretsList(client, secretConfigInputs);
+        const secretIds: string[] = await buildSecretsList(client, secretConfigInputs, nameTransformation);
 
         // Keep track of secret names that will need to be cleaned from the environment
         let secretsToCleanup = [] as string[];
@@ -35,15 +37,22 @@ export async function run(): Promise<void> {
         // Get and inject secret values
         for (let secretId of secretIds) {
             //  Optionally let user set an alias, i.e. `ENV_NAME,secret_name`
-            let secretAlias = '';
-            [secretAlias, secretId] = extractAliasAndSecretIdFromInput(secretId);
+            let secretAlias: string | undefined = undefined;
+            [secretAlias, secretId] = extractAliasAndSecretIdFromInput(secretId, nameTransformation);
 
             // Retrieves the secret name also, if the value is an ARN
             const isArn = isSecretArn(secretId);
 
             try {
                 const secretValueResponse : SecretValueResponse = await getSecretValue(client, secretId);
-                if (!secretAlias){
+                const secretValue = secretValueResponse.secretValue;
+
+                // Catch if blank prefix is specified but no json is parsed to avoid blank environment variable
+                if ((secretAlias === '') && !(parseJsonSecrets && isJSONString(secretValue))) {
+                    secretAlias = undefined;
+                }
+
+                if (secretAlias === undefined) {
                     secretAlias = isArn ? secretValueResponse.name : secretId;
                 }
                 
@@ -53,7 +62,7 @@ export async function run(): Promise<void> {
                     secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
                 }
                 else{
-                    const injectedSecrets = injectSecret(secretAlias, secretValueResponse.secretValue, parseJsonSecrets);
+                    const injectedSecrets = injectSecret(secretAlias, secretValueResponse.secretValue, parseJsonSecrets,nameTransformation);
                     
                     secretsToCleanup = [...secretsToCleanup, ...injectedSecrets];
                 }
