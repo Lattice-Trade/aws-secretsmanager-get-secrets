@@ -35,7 +35,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveEnvFile = exports.cleanVariable = exports.extractAliasAndSecretIdFromInput = exports.isSecretArn = exports.transformToValidEnvName = exports.isJSONString = exports.injectSecretEnvFile = exports.injectSecret = exports.getSecretValue = exports.getSecretsWithPrefix = exports.buildSecretsList = void 0;
+exports.buildSecretsList = buildSecretsList;
+exports.getSecretsWithPrefix = getSecretsWithPrefix;
+exports.getSecretValue = getSecretValue;
+exports.injectSecret = injectSecret;
+exports.injectSecretEnvFile = injectSecretEnvFile;
+exports.isJSONString = isJSONString;
+exports.transformToValidEnvName = transformToValidEnvName;
+exports.isSecretArn = isSecretArn;
+exports.extractAliasAndSecretIdFromInput = extractAliasAndSecretIdFromInput;
+exports.cleanVariable = cleanVariable;
+exports.saveEnvFile = saveEnvFile;
 const core = __importStar(require("@actions/core"));
 const fs_1 = __importDefault(require("fs"));
 const client_secrets_manager_1 = require("@aws-sdk/client-secrets-manager");
@@ -69,7 +79,6 @@ function buildSecretsList(client, configInputs) {
         return [...finalSecretsList];
     });
 }
-exports.buildSecretsList = buildSecretsList;
 /**
  * Uses ListSecrets to find secrets for a given prefix
  *
@@ -116,7 +125,6 @@ function getSecretsWithPrefix(client, prefix, hasAlias) {
         }
     });
 }
-exports.getSecretsWithPrefix = getSecretsWithPrefix;
 /**
  * Retrieves a secret from Secrets Manager
  *
@@ -144,7 +152,6 @@ function getSecretValue(client, secretId) {
         };
     });
 }
-exports.getSecretValue = getSecretValue;
 /**
  * Transforms and injects secret as a masked environmental variable
  *
@@ -180,7 +187,6 @@ function injectSecret(secretName, secretValue, parseJsonSecrets, tempEnvName) {
     }
     return secretsToCleanup;
 }
-exports.injectSecret = injectSecret;
 /**
  * Transforms and injects secret as a masked environmental variable
  *
@@ -219,7 +225,6 @@ function injectSecretEnvFile(pathMameEnvFile, secretName, secretValue, parseJson
     }
     return secretsToCleanup;
 }
-exports.injectSecretEnvFile = injectSecretEnvFile;
 /*
  * Checks if the given secret is a valid JSON value
  */
@@ -234,7 +239,6 @@ function isJSONString(secretValue) {
         return false;
     }
 }
-exports.isJSONString = isJSONString;
 /*
  * Transforms the secret name into a valid environmental variable name
  * It should consist of only upper case letters, digits, and underscores and cannot begin with a number
@@ -247,7 +251,6 @@ function transformToValidEnvName(secretName) {
     // Remove invalid characters
     return secretName.replace(/[^a-zA-Z0-9_]/g, '_').toUpperCase();
 }
-exports.transformToValidEnvName = transformToValidEnvName;
 /**
  * Checks if the given secretId is an ARN
  *
@@ -258,7 +261,6 @@ function isSecretArn(secretId) {
     const validArn = new RegExp('^arn:aws:secretsmanager:.*:[0-9]{12,}:secret:.*$');
     return validArn.test(secretId);
 }
-exports.isSecretArn = isSecretArn;
 /*
  * Separates a secret alias from the secret name/arn, if one was provided
  */
@@ -278,7 +280,6 @@ function extractAliasAndSecretIdFromInput(input) {
     // No alias
     return ['', input.trim()];
 }
-exports.extractAliasAndSecretIdFromInput = extractAliasAndSecretIdFromInput;
 /*
  * Cleans up an environment variable
  */
@@ -286,7 +287,6 @@ function cleanVariable(variableName) {
     core.exportVariable(variableName, '');
     delete process.env[variableName];
 }
-exports.cleanVariable = cleanVariable;
 function saveEnvFile(envFilePath, envContent) {
     if (fs_1.default.existsSync(envFilePath)) {
         fs_1.default.appendFile(envFilePath, envContent, (err) => {
@@ -309,4 +309,3 @@ function saveEnvFile(envFilePath, envContent) {
         });
     }
 }
-exports.saveEnvFile = saveEnvFile;
