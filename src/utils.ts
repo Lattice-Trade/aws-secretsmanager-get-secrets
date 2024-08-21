@@ -1,5 +1,4 @@
 import * as core from '@actions/core'
-import fs from 'fs';
 import {
     SecretsManagerClient,
     GetSecretValueCommand,
@@ -162,52 +161,9 @@ export function injectSecret(
         const envName = transformToValidEnvName(tempEnvName ? tempEnvName : secretName, nameTransformation);
 
         // Fail the action if this variable name is already in use, or is our cleanup name
-        // if (process.env[envName] || envName === CLEANUP_NAME){
-        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        // }
-
-        // Inject a single secret
-        core.setSecret(secretValue);
-
-        // Export variable
-        core.debug(`Injecting secret ${secretName} as environment variable '${envName}'.`);
-        core.exportVariable(envName, secretValue);
-        secretsToCleanup.push(envName);
-    }
-
-    return secretsToCleanup;
-}
-
-/**
- * Transforms and injects secret as a masked environmental variable
- *
- * @param secretName: Name of the secret
- * @param secretValue: Value to set for secret
- * @param parseJsonSecrets: Indicates whether to deserialize JSON secrets
- * @param tempEnvName: If parsing JSON secrets, contains the current name for the env variable
- */
-export function injectSecretEnvFile(pathMameEnvFile: string, secretName: string, secretValue: string, parseJsonSecrets: boolean, tempEnvName?: string): string[] {
-    let secretsToCleanup = [] as string[];
-    if(parseJsonSecrets && isJSONString(secretValue)){
-        // Recursively parses json secrets
-        const secretMap = JSON.parse(secretValue) as Record<string, any>;
-        let envContent = '';
-        for (const k in secretMap) {
-            const keyValue = typeof secretMap[k] === 'string' ? secretMap[k] : JSON.stringify(secretMap[k]);
-
-            // Append the current key to the name of the env variable
-            const newEnvName = `${transformToValidEnvName(k)}`;
-            envContent+= `${newEnvName}=${keyValue}\n`;
-            secretsToCleanup = [...secretsToCleanup, ...injectSecretEnvFile(pathMameEnvFile, secretName, keyValue, parseJsonSecrets, newEnvName)];
+        if (process.env[envName] || envName === CLEANUP_NAME){
+            throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
         }
-        saveEnvFile(pathMameEnvFile, envContent);
-    } else {
-        const envName = tempEnvName ? transformToValidEnvName(tempEnvName) : transformToValidEnvName(secretName);
-
-        // Fail the action if this variable name is already in use, or is our cleanup name
-        // if (process.env[envName] || envName === CLEANUP_NAME){
-        //     throw new Error(`The environment name '${envName}' is already in use. Please use an alias to ensure that each secret has a unique environment name`);
-        // }
 
         // Inject a single secret
         core.setSecret(secretValue);
@@ -295,25 +251,6 @@ export function cleanVariable(variableName: string) {
     delete process.env[variableName];
 }
 
-export function saveEnvFile(envFilePath: string, envContent: string): void {
-if (fs.existsSync(envFilePath)) {
-    fs.appendFile(envFilePath, envContent, (err) => {
-        if (err) {
-        console.error('Error al actualizar el archivo .env:', err);
-        } else {
-        console.log('Archivo .env actualizado exitosamente.');
-        }
-    });
-    } else {
-    fs.writeFile(envFilePath, envContent, (err) => {
-        if (err) {
-        console.error('Error al crear el archivo .env:', err);
-        } else {
-        console.log('Archivo .env creado exitosamente.');
-        }
-    });
-    }
-}
 /*
  * Converts name of the transformation to the actual function that performs the transformation.
  */
